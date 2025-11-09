@@ -1,0 +1,6 @@
+{
+    "python.defaultInterpreterPath": "D:\\Multimodal\\myenv\\Scripts\\python.exe",
+    "terminal.integrated.shellIntegration.enabled": true,
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
+    "python.terminal.activateEnvironment": true
+}
