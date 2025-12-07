@@ -8,18 +8,24 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import logging
+from threading import Lock
+from email_validator import validate_email, EmailNotValidError
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 
 # Set up Flask app
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:8501"]}})
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:8501"], "methods": ["GET", "POST", "DELETE"]}})
 limiter = Limiter(
     app,
     key_func=get_remote_address,
     default_limits=["200 per day", "50 per hour"]
 )
+
+# Initialize thread-safe global list
+users = []
+lock = Lock()
 
 # ================= PAGE SETTINGS =================
 st.set_page_config(
@@ -202,6 +208,40 @@ def ask_question():
             return jsonify({'error': 'No query provided'}), 400
         answer = generate_answer(query)
         return jsonify({'answer': answer}), 200
+
+@app.route('/api/users', methods=['POST'])
+@limiter.limit("10 per minute")
+def create_user():
+    if request.method == 'POST':
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        email = data.get('email')
+        try:
+            validate_email(email)
+        except EmailNotValidError as e:
+            return jsonify({'error': str(e)}), 400
+        with lock:
+            users.append(email)
+        return jsonify({'message': 'User created successfully'}), 201
+
+@app.route('/api/users', methods=['GET'])
+@limiter.limit("10 per minute")
+def get_users():
+    if request.method == 'GET':
+        with lock:
+            return jsonify({'users': [user[:10] + '...' for user in users]}), 200
+
+@app.route('/api/users/<email>', methods=['DELETE'])
+@limiter.limit("10 per minute")
+def delete_user(email):
+    if request.method == 'DELETE':
+        with lock:
+            if email in users:
+                users.remove(email)
+                return jsonify({'message': 'User deleted successfully'}), 200
+            else:
+                return jsonify({'error': 'User not found'}), 404
 
 @app.errorhandler(404)
 def not_found(e):
